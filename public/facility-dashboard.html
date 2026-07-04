@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ATLAS · Facility Digital Twin</title>
+<style>
+  :root{
+    --bg:oklch(0.985 0.008 220);
+    --fg:oklch(0.22 0.05 240);
+    --muted:oklch(0.5 0.04 245);
+    --border:oklch(0.85 0.04 240);
+    --secondary:oklch(0.95 0.02 230);
+    --primary:oklch(0.55 0.19 245);
+    --primary-fg:#fff;
+    --hud:oklch(0.99 0.005 230 / 0.85);
+    --grid1:oklch(0.55 0.19 245 / 0.12);
+    --grid2:oklch(0.55 0.19 245 / 0.25);
+    --warm:oklch(0.85 0.19 75);
+    --cool:oklch(0.65 0.17 220);
+    --shadow-hud:0 1px 0 oklch(1 0 0 / .9) inset, 0 20px 40px -20px oklch(0.4 0.15 245 / .35);
+  }
+  *{box-sizing:border-box;border-color:var(--border)}
+  html,body{margin:0;padding:0;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--fg);background:var(--bg)}
+  body{
+    min-height:100vh;
+    background-image:
+      linear-gradient(var(--grid1) 1px,transparent 1px),
+      linear-gradient(90deg,var(--grid1) 1px,transparent 1px),
+      linear-gradient(var(--grid2) 1px,transparent 1px),
+      linear-gradient(90deg,var(--grid2) 1px,transparent 1px);
+    background-size:24px 24px,24px 24px,120px 120px,120px 120px;
+  }
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .tabnum{font-variant-numeric:tabular-nums}
+  .hud{background:var(--hud);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow-hud)}
+  .kicker{font-size:10px;text-transform:uppercase;letter-spacing:.2em;color:var(--muted)}
+  header.topbar{border-bottom:1px solid var(--border);background:rgba(255,255,255,.6);backdrop-filter:blur(8px)}
+  .wrap{max-width:1600px;margin:0 auto;padding:12px 24px}
+  .topbar-row{display:flex;align-items:center;justify-content:space-between}
+  .brand{display:flex;align-items:center;gap:12px}
+  .brand .logo{width:36px;height:36px;display:grid;place-items:center;border-radius:8px;background:var(--primary);color:#fff}
+  .brand .t1{font-size:13px;font-weight:600;letter-spacing:.1em}
+  .brand .t2{font-size:10px;text-transform:uppercase;letter-spacing:.2em;color:var(--muted)}
+  .live-dot{display:inline-block;width:8px;height:8px;border-radius:99px;background:#10b981;box-shadow:0 0 10px currentColor;margin-right:6px;vertical-align:middle}
+  .grid{max-width:1600px;margin:0 auto;padding:24px;display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
+  aside,main{grid-column:span 12}
+  @media(min-width:1024px){
+    .col-l{grid-column:span 3}
+    .col-c{grid-column:span 6}
+    .col-r{grid-column:span 3}
+  }
+  .card-pad{padding:16px}
+  .row{display:flex;align-items:center;justify-content:space-between}
+  .bar-row{display:flex;align-items:flex-end;gap:6px;margin-top:16px}
+  .bar{flex:1;border-radius:3px;transition:.3s}
+  .stat{border:1px solid var(--border);background:oklch(0.95 0.02 230 / .4);border-radius:8px;padding:8px}
+  .stat .k{display:flex;gap:6px;align-items:center;font-size:10px;text-transform:uppercase;letter-spacing:.15em;color:var(--muted)}
+  .stat .v{margin-top:4px;font-size:18px;font-weight:600;font-family:ui-monospace,monospace}
+  .btn-zone{width:100%;text-align:left;border:1px solid var(--border);border-radius:8px;padding:8px;background:transparent;cursor:pointer;transition:.2s}
+  .btn-zone:hover{border-color:color-mix(in oklch, var(--primary) 60%, transparent)}
+  .btn-zone.sel{border-color:var(--primary);background:oklch(0.55 0.19 245 / .05)}
+  .pbar{height:6px;border-radius:99px;background:var(--secondary);overflow:hidden;margin-top:6px}
+  .pbar>span{display:block;height:100%;border-radius:99px}
+  .divide>*+*{border-top:1px solid var(--border)}
+  /* iso stage */
+  .stage{perspective:1600px;position:relative;height:560px;width:100%;overflow:hidden}
+  .plane{transform-style:preserve-3d;transform:rotateX(58deg) rotateZ(-40deg);position:absolute;left:50%;top:50%;width:600px;height:480px;margin-left:-300px;margin-top:-240px}
+  .ground{position:absolute;inset:0;border-radius:2px;background:oklch(0.97 0.01 230);border:1.5px solid oklch(0.5 0.15 245 / .6);box-shadow:0 30px 60px -20px oklch(0.4 0.15 245 / .4);
+    background-image:linear-gradient(oklch(0.55 0.19 245 / .25) 1px,transparent 1px),linear-gradient(90deg,oklch(0.55 0.19 245 / .25) 1px,transparent 1px);
+    background-size:20px 20px;
+  }
+  .ground2{position:absolute;inset:0;background-image:linear-gradient(oklch(0.55 0.19 245 / .15) 1px,transparent 1px),linear-gradient(90deg,oklch(0.55 0.19 245 / .15) 1px,transparent 1px);background-size:20px 20px;pointer-events:none}
+  .room{position:absolute;cursor:pointer;transition:.3s;border-radius:2px}
+  .room-label{position:absolute;left:8px;top:8px;transform:rotateZ(40deg) rotateX(-58deg);transform-origin:top left;user-select:none}
+  .rc{font-size:9px;text-transform:uppercase;letter-spacing:.2em;color:color-mix(in oklch,var(--primary) 70%, transparent);font-family:ui-monospace,monospace}
+  .rn{font-size:12px;font-weight:600}
+  .device{position:absolute;background:none;border:0;padding:0;cursor:pointer;transform:translate(-50%,-50%) translateZ(20px)}
+  .device .sprite{transform:rotateZ(40deg) rotateX(-58deg);transform-origin:center;position:relative}
+  .light-body{width:32px;height:32px;border-radius:99px;display:grid;place-items:center;border:2px solid oklch(0.6 0.03 240);background:oklch(0.95 0.01 240);transition:.2s}
+  .light-body.on{border-color:oklch(0.75 0.18 75);background:radial-gradient(circle at 35% 30%,oklch(1 0.05 90),oklch(0.85 0.19 75));box-shadow:0 0 20px oklch(0.85 0.19 75 / .9),inset 0 0 8px oklch(1 0.05 90)}
+  .light-body svg{width:16px;height:16px;color:oklch(0.6 0.03 240)}
+  .light-body.on svg{color:oklch(0.25 0.1 60)}
+  .fan-body{width:40px;height:40px;border-radius:99px;display:grid;place-items:center;border:2px solid oklch(0.6 0.03 240);background:oklch(0.98 0.005 230);position:relative}
+  .fan-body.on{border-color:oklch(0.6 0.16 200);box-shadow:0 0 15px oklch(0.65 0.17 220 / .6)}
+  .fan-blade{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);animation:spin 6s linear infinite;opacity:.6}
+  .fan-body.on .fan-blade{animation:spin 1.4s linear infinite;opacity:1}
+  .fan-blade svg{width:24px;height:24px;color:oklch(0.55 0.03 240)}
+  .fan-body.on .fan-blade svg{color:oklch(0.45 0.17 220)}
+  @keyframes spin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+  .floor-glow{position:absolute;left:50%;top:50%;width:90px;height:90px;border-radius:99px;pointer-events:none;transform:translate(-50%,-50%) translateZ(-19px);filter:blur(2px);animation:pulse 3s ease-in-out infinite;background:radial-gradient(circle,oklch(0.9 0.18 80 / .8),oklch(0.85 0.19 75 / .35) 40%,transparent 70%)}
+  @keyframes pulse{0%,100%{opacity:.75}50%{opacity:1}}
+  .corner{position:absolute;font-family:ui-monospace,monospace;font-size:10px;text-transform:uppercase;letter-spacing:.2em;color:color-mix(in oklch,var(--primary) 70%,transparent);pointer-events:none}
+  .scanline{position:relative;overflow:hidden}
+  .scanline::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent,oklch(0.55 0.19 245 / .08),transparent);animation:scan 6s linear infinite;pointer-events:none}
+  @keyframes scan{from{transform:translateY(-100%)}to{transform:translateY(100%)}}
+  /* unit list */
+  .unit{display:flex;align-items:center;gap:12px;border:1px solid var(--border);border-radius:8px;padding:8px;background:oklch(0.95 0.02 230 / .3);transition:.2s}
+  .unit.on{border-color:oklch(0.55 0.19 245 / .4);background:oklch(0.55 0.19 245 / .05)}
+  .icobox{width:32px;height:32px;border-radius:6px;border:1px solid var(--border);display:grid;place-items:center;flex-shrink:0}
+  .unit.on .icobox{border-color:var(--primary);background:oklch(0.55 0.19 245 / .1);color:var(--primary)}
+  .icobox svg{width:16px;height:16px;color:var(--muted)}
+  .unit.on .icobox svg{color:var(--primary)}
+  .switch{position:relative;width:44px;height:24px;border-radius:99px;background:oklch(0.9 0.02 240);border:1px solid var(--border);cursor:pointer;flex-shrink:0;transition:.2s;box-shadow:inset 0 1px 2px oklch(0 0 0 / .08)}
+  .switch.on{background:var(--primary);border-color:oklch(0.45 0.18 245);box-shadow:0 0 12px oklch(0.55 0.19 245 / .6),inset 0 1px 0 oklch(1 0 0 / .3)}
+  .switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;background:#fff;border-radius:99px;box-shadow:0 1px 3px oklch(0 0 0 / .3);transition:.2s}
+  .switch.on::after{left:22px}
+  /* feed */
+  .ticker{position:relative;overflow:hidden;white-space:nowrap;padding:8px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+  .ticker-track{display:inline-flex;gap:32px;padding-left:16px;font-family:ui-monospace,monospace;font-size:12px;animation:ticker 45s linear infinite}
+  @keyframes ticker{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+  .feed-log{max-height:160px;overflow-y:auto;padding:12px;font-family:ui-monospace,monospace;font-size:11px}
+  .feed-log>div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .amber-dot{display:inline-block;width:8px;height:8px;border-radius:99px;background:#f59e0b;box-shadow:0 0 10px currentColor;animation:pulse2 1.6s ease-in-out infinite}
+  @keyframes pulse2{50%{opacity:.5}}
+  .scroll{max-height:720px;overflow-y:auto;padding:12px}
+  .zone-hdr{display:flex;align-items:center;justify-content:space-between;padding:0 4px;margin-bottom:8px}
+  .zone-dot{display:inline-block;width:8px;height:8px;border-radius:99px;margin-right:8px;vertical-align:middle}
+  .footer-strip{display:flex;gap:16px;align-items:center;padding:8px 16px;border-top:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.2em;color:var(--muted)}
+  .pill{padding:1px 6px;border-radius:99px;background:oklch(0.55 0.19 245 / .1);color:var(--primary);font-family:ui-monospace,monospace;font-size:10px}
+</style>
+</head>
+<script src="/socket.io/socket.io.js"></script>
+<body>
+<!-- SVG symbols -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-bulb" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5A5 5 0 1 0 8.5 11.5c.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></symbol>
+    <symbol id="i-fan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.827 16.379a6.082 6.082 0 0 1-8.618-7.002l5.412 1.45a6.082 6.082 0 0 1 7.002-8.618l-1.45 5.412a6.082 6.082 0 0 1 8.618 7.002l-5.412-1.45a6.082 6.082 0 0 1-7.002 8.618l1.45-5.412Z"/><path d="M12 12v.01"/></symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2M9 2v2M15 20v2M9 20v2M2 15h2M2 9h2M20 15h2M20 9h2"/></symbol>
+    <symbol id="i-power" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.5.5 0 0 1-.96 0L9.24 2.18a.5.5 0 0 0-.96 0l-2.35 8.36A2 2 0 0 1 4 12H2"/></symbol>
+    <symbol id="i-radio" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M4.93 19.07a10 10 0 0 1 0-14.14M19.07 4.93a10 10 0 0 1 0 14.14M7.76 16.24a6 6 0 0 1 0-8.48M16.24 7.76a6 6 0 0 1 0 8.48"/></symbol>
+    <symbol id="i-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></symbol>
+  </defs>
+</svg>
+
+<header class="topbar">
+  <div class="wrap topbar-row">
+    <div class="brand">
+      <div class="logo"><svg width="20" height="20"><use href="#i-cpu"/></svg></div>
+      <div>
+        <div class="t1">ATLAS · FACILITY OS</div>
+        <div class="t2">Digital Twin — Sector 7 / Level 02</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:24px;align-items:center;font-size:11px;text-transform:uppercase;letter-spacing:.2em;color:var(--muted)">
+      <span><span class="live-dot"></span>Uplink Live</span>
+      <span id="clock" class="tabnum" style="color:var(--fg)">--:--:--</span>
+      <a href="/office_digital_twin.html" style="
+          display:flex;align-items:center;gap:8px;
+          padding:8px 16px;border-radius:8px;text-decoration:none;
+          background:linear-gradient(135deg, oklch(0.55 0.19 245), oklch(0.65 0.17 220));
+          color:#fff;font-weight:600;letter-spacing:.1em;font-size:11px;
+          box-shadow:0 0 20px oklch(0.55 0.19 245 / .6), 0 0 40px oklch(0.55 0.19 245 / .3);
+          animation:pulseGlow 2.2s ease-in-out infinite;">
+        <svg width="14" height="14"><use href="#i-cpu"/></svg>
+        Enter 3D Walkthrough
+      </a>
+    </div>
+  </div>
+</header>
+<style>
+@keyframes pulseGlow {
+  0%, 100% { box-shadow:0 0 20px oklch(0.55 0.19 245 / .6), 0 0 40px oklch(0.55 0.19 245 / .3); }
+  50% { box-shadow:0 0 30px oklch(0.55 0.19 245 / .9), 0 0 60px oklch(0.55 0.19 245 / .5); }
+}
+</style>
+
+<div class="grid">
+  <!-- LEFT -->
+  <aside class="col-l" style="display:flex;flex-direction:column;gap:16px">
+    <div class="hud card-pad">
+      <div class="row kicker"><span style="display:flex;gap:6px;align-items:center"><svg width="12" height="12"><use href="#i-zap"/></svg> Total Power Draw</span><span>W · Live</span></div>
+      <div style="margin-top:8px;display:flex;align-items:baseline;gap:8px">
+        <div id="watts" class="mono tabnum" style="font-size:56px;font-weight:700;line-height:1">000</div>
+        <div style="font-size:14px;color:var(--muted)">W</div>
+      </div>
+      <div id="bars" class="bar-row"></div>
+      <div class="row" style="margin-top:12px;font-size:12px">
+        <span style="color:var(--muted)">Capacity 600W</span>
+        <span id="loadpct" class="mono tabnum">0.0%</span>
+      </div>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="stat"><div class="k"><svg width="12" height="12"><use href="#i-activity"/></svg> Active Units</div><div id="active" class="v">0/0</div></div>
+        <div class="stat"><div class="k"><svg width="12" height="12"><use href="#i-radio"/></svg> Zones Online</div><div class="v">3/3</div></div>
+      </div>
+    </div>
+    <div class="hud card-pad">
+      <div class="row kicker"><span style="display:flex;gap:6px;align-items:center"><svg width="12" height="12"><use href="#i-gauge"/></svg> Zone Load</span></div>
+      <div id="zones" style="margin-top:12px;display:flex;flex-direction:column;gap:12px"></div>
+    </div>
+    <div class="hud card-pad">
+      <div class="kicker">System</div>
+      <div class="divide" style="margin-top:8px;font-size:12px">
+        <div class="row" style="padding:6px 0"><span style="color:var(--muted)">Mesh Sensors</span><span class="mono tabnum">24/24</span></div>
+        <div class="row" style="padding:6px 0"><span style="color:var(--muted)">MQTT Broker</span><span class="mono tabnum">OK</span></div>
+        <div class="row" style="padding:6px 0"><span style="color:var(--muted)">Latency</span><span class="mono tabnum">18ms</span></div>
+        <div class="row" style="padding:6px 0"><span style="color:var(--muted)">Firmware</span><span class="mono tabnum">v4.2.1</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- CENTER -->
+  <main class="col-c">
+    <div class="hud scanline" style="overflow:hidden">
+      <div class="row" style="padding:8px 16px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.2em;color:var(--muted)">
+        <span>Floor Plan · Isometric View</span>
+        <span class="tabnum">SCALE 1:50 · GRID 24px</span>
+      </div>
+      <div class="stage">
+        <div style="position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 40%,transparent 40%,oklch(0.55 0.19 245 / .05) 100%)"></div>
+        <div id="plane" class="plane">
+          <div class="ground"></div>
+          <div class="ground2"></div>
+        </div>
+        <div class="corner" style="left:12px;top:12px">N ↑ · ISO 30°</div>
+        <div class="corner" style="right:12px;top:12px">REC · LIVE</div>
+        <div class="corner" style="left:12px;bottom:12px;color:var(--muted)">Click a zone or asset to interact</div>
+      </div>
+      <div class="footer-strip">
+        <span><span class="zone-dot" style="background:oklch(0.85 0.19 75)"></span>Light</span>
+        <span><span class="zone-dot" style="background:oklch(0.65 0.17 220)"></span>Fan</span>
+        <span style="margin-left:auto">Tap any asset to toggle</span>
+      </div>
+    </div>
+
+    <div class="hud" style="margin-top:16px;overflow:hidden">
+      <div class="row" style="padding:8px 16px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.2em;color:var(--muted)">
+        <span><span class="amber-dot" style="margin-right:8px"></span>Mission Log · Live Feed</span>
+        <span id="evct" style="margin-left:auto">0 events</span>
+      </div>
+      <div class="ticker"><div id="ticker" class="ticker-track"><span></span><span></span></div></div>
+      <div id="feedlog" class="feed-log"></div>
+    </div>
+  </main>
+
+  <!-- RIGHT -->
+  <aside class="col-r">
+    <div class="hud" style="overflow:hidden">
+      <div class="row" style="padding:12px 16px;border-bottom:1px solid var(--border)">
+        <div>
+          <div class="kicker">Command Center</div>
+          <div style="font-size:14px;font-weight:600">Unit Inventory · 15</div>
+        </div>
+        <svg width="16" height="16" style="color:var(--primary)"><use href="#i-power"/></svg>
+      </div>
+      <div id="units" class="scroll"></div>
+    </div>
+  </aside>
+</div>
+
+<script>
+const ROOMS = [
+  { id:"drawing", name:"Drawing Room", code:"DR-01", x:0, y:0, w:320, h:240, color:"oklch(0.55 0.19 245)" },
+  { id:"work1",   name:"Work Room 1", code:"WR-01", x:340, y:0, w:260, h:240, color:"oklch(0.6 0.16 180)" },
+  { id:"work2",   name:"Work Room 2", code:"WR-02", x:0, y:260, w:600, h:220, color:"oklch(0.65 0.18 300)" },
+];
+const DEVICES = [
+  { id:"DR-F1", type:"fan",   room:"drawing", label:"Fan 1", watts:60, on:true,  x:0.20, y:0.30 },
+  { id:"DR-F2", type:"fan",   room:"drawing", label:"Fan 2", watts:60, on:false, x:0.80, y:0.30 },
+  { id:"DR-L1", type:"light", room:"drawing", label:"Light 1", watts:15, on:true,  x:0.25, y:0.65 },
+  { id:"DR-L2", type:"light", room:"drawing", label:"Light 2", watts:15, on:false, x:0.50, y:0.65 },
+  { id:"DR-L3", type:"light", room:"drawing", label:"Light 3", watts:15, on:true,  x:0.75, y:0.65 },
+  { id:"W1-F1", type:"fan",   room:"work1",   label:"Fan 1", watts:60, on:false, x:0.20, y:0.30 },
+  { id:"W1-F2", type:"fan",   room:"work1",   label:"Fan 2", watts:60, on:true,  x:0.80, y:0.30 },
+  { id:"W1-L1", type:"light", room:"work1",   label:"Light 1", watts:15, on:true,  x:0.25, y:0.65 },
+  { id:"W1-L2", type:"light", room:"work1",   label:"Light 2", watts:15, on:true,  x:0.50, y:0.65 },
+  { id:"W1-L3", type:"light", room:"work1",   label:"Light 3", watts:15, on:false, x:0.75, y:0.65 },
+  { id:"W2-F1", type:"fan",   room:"work2",   label:"Fan 1", watts:60, on:true,  x:0.30, y:0.35 },
+  { id:"W2-F2", type:"fan",   room:"work2",   label:"Fan 2", watts:60, on:true,  x:0.70, y:0.35 },
+  { id:"W2-L1", type:"light", room:"work2",   label:"Light 1", watts:15, on:false, x:0.20, y:0.75 },
+  { id:"W2-L2", type:"light", room:"work2",   label:"Light 2", watts:15, on:true,  x:0.50, y:0.75 },
+  { id:"W2-L3", type:"light", room:"work2",   label:"Light 3", watts:15, on:true,  x:0.80, y:0.75 },
+];
+const CAP = 600;
+let selectedRoom = null;
+let hoverRoom = null;
+let feed = [
+  "[SYS] Digital twin online — 15 assets synchronized",
+  "[NET] Telemetry uplink stable @ 240 Hz",
+  "[OPS] Facility entering nominal state",
+];
+const roomName = id => ROOMS.find(r=>r.id===id)?.name || id;
+
+function pushFeed(msg){
+  const ts = new Date().toLocaleTimeString([],{hour12:false});
+  feed = [`[${ts}] ${msg}`, ...feed].slice(0,40);
+  renderFeed();
+}
+function toggle(id){
+  const d = DEVICES.find(x=>x.id===id); if(!d) return;
+  pushFeed(`${d.on?"OFF":"ON "} ${d.id} · ${d.label} (${roomName(d.room)})`);
+  d.on = !d.on;
+  renderAll();
+  const backendId = localToBackendId[id];
+  if(backendId && socket) socket.emit('toggle', backendId);
+}
+
+/* ---------- render ---------- */
+function svgUse(id){ return `<svg><use href="#${id}"/></svg>`; }
+
+function renderPlane(){
+  const plane = document.getElementById("plane");
+  // remove existing rooms
+  plane.querySelectorAll(".room").forEach(n=>n.remove());
+  ROOMS.forEach(room=>{
+    const el = document.createElement("div");
+    el.className = "room";
+    el.dataset.id = room.id;
+    const highlight = (hoverRoom===room.id || selectedRoom===room.id);
+    Object.assign(el.style, {
+      left:room.x+"px", top:room.y+"px", width:room.w+"px", height:room.h+"px",
+      transform: highlight ? "translateZ(28px)" : "translateZ(4px)",
+      background: highlight ? `color-mix(in oklch, ${room.color} 15%, transparent)` : "oklch(0.55 0.19 245 / .05)",
+      border: `1.5px solid ${highlight ? room.color : "oklch(0.5 0.15 245 / .5)"}`,
+      boxShadow: highlight ? `0 20px 40px -10px ${room.color}` : "0 4px 12px -4px oklch(0.4 0.15 245 / .3)",
+    });
+    el.innerHTML = `<div class="room-label"><div class="rc">${room.code}</div><div class="rn">${room.name}</div></div>`;
+    el.addEventListener("mouseenter", ()=>{ hoverRoom=room.id; renderPlane(); });
+    el.addEventListener("mouseleave", ()=>{ hoverRoom=null;  renderPlane(); });
+    el.addEventListener("click", ()=>{ selectedRoom = selectedRoom===room.id ? null : room.id; renderAll(); });
+    // devices
+    DEVICES.filter(d=>d.room===room.id).forEach(d=>{
+      const btn = document.createElement("button");
+      btn.className = "device";
+      btn.title = `${d.id} · ${d.label}`;
+      btn.style.left = (d.x*room.w)+"px";
+      btn.style.top  = (d.y*room.h)+"px";
+      const glow = (d.on && d.type==="light") ? `<div class="floor-glow"></div>` : "";
+      const body = d.type==="light"
+        ? `<div class="light-body ${d.on?'on':''}">${svgUse("i-bulb")}</div>`
+        : `<div class="fan-body ${d.on?'on':''}"><div class="fan-blade">${svgUse("i-fan")}</div></div>`;
+      btn.innerHTML = `${glow}<div class="sprite">${body}</div>`;
+      btn.addEventListener("click", e=>{ e.stopPropagation(); toggle(d.id); });
+      el.appendChild(btn);
+    });
+    plane.appendChild(el);
+  });
+}
+
+function renderTelemetry(){
+  const total = DEVICES.reduce((s,d)=>s+(d.on?d.watts:0),0);
+  const active = DEVICES.filter(d=>d.on).length;
+  const pct = Math.min(100, total/CAP*100);
+  document.getElementById("watts").textContent = String(total).padStart(3,"0");
+  document.getElementById("loadpct").textContent = pct.toFixed(1)+"%";
+  document.getElementById("active").textContent = `${active}/${DEVICES.length}`;
+  const bars = document.getElementById("bars");
+  bars.innerHTML = "";
+  const filledCount = Math.round(pct/100*24);
+  for(let i=0;i<24;i++){
+    const b = document.createElement("div");
+    b.className = "bar";
+    const filled = i<filledCount;
+    const hot = i>=18;
+    Object.assign(b.style,{
+      height:(20+i*2)+"px",
+      background: filled ? (hot?"oklch(0.7 0.2 30)":"oklch(0.55 0.19 245)") : "oklch(0.85 0.03 240 / .4)",
+      boxShadow: filled ? "0 0 10px oklch(0.55 0.19 245 / .6)" : "none",
+    });
+    bars.appendChild(b);
+  }
+  // zones
+  const perRoom = ROOMS.map(r=>{
+    const rd = DEVICES.filter(d=>d.room===r.id);
+    return { room:r, watts:rd.reduce((s,d)=>s+(d.on?d.watts:0),0), active:rd.filter(d=>d.on).length, total:rd.length };
+  });
+  const max = Math.max(1, ...perRoom.map(x=>x.watts));
+  const zc = document.getElementById("zones");
+  zc.innerHTML = "";
+  perRoom.forEach(({room,watts,active,total})=>{
+    const isSel = selectedRoom===room.id;
+    const btn = document.createElement("button");
+    btn.className = "btn-zone"+(isSel?" sel":"");
+    btn.innerHTML = `
+      <div class="row" style="font-size:12px"><span style="font-weight:600">${room.name}</span><span class="mono tabnum" style="color:var(--muted)">${watts}W · ${active}/${total}</span></div>
+      <div class="pbar"><span style="width:${(watts/max)*100}%;background:${room.color}"></span></div>`;
+    btn.addEventListener("click", ()=>{ selectedRoom = isSel?null:room.id; renderAll(); });
+    zc.appendChild(btn);
+  });
+}
+
+function renderUnits(){
+  const c = document.getElementById("units");
+  c.innerHTML = "";
+  ROOMS.forEach(room=>{
+    const items = DEVICES.filter(d=>d.room===room.id);
+    const dim = selectedRoom && selectedRoom!==room.id;
+    const grp = document.createElement("div");
+    grp.style.opacity = dim?"0.4":"1";
+    grp.style.transition = "opacity .2s";
+    grp.style.marginBottom = "16px";
+    grp.innerHTML = `<div class="zone-hdr"><div><span class="zone-dot" style="background:${room.color}"></span><span style="font-size:10px;text-transform:uppercase;letter-spacing:.2em;font-weight:600">${room.name}</span></div><span class="mono" style="font-size:10px;color:var(--muted)">${room.code}</span></div>`;
+    const list = document.createElement("div");
+    list.style.cssText="display:flex;flex-direction:column;gap:6px";
+    items.forEach(d=>{
+      const ic = d.type==="light" ? "i-bulb" : "i-fan";
+      const row = document.createElement("div");
+      row.className = "unit"+(d.on?" on":"");
+      row.innerHTML = `
+        <div class="icobox">${svgUse(ic)}</div>
+        <div style="min-width:0;flex:1">
+          <div style="display:flex;gap:8px;align-items:center">
+            <span class="mono" style="font-size:10px;color:var(--muted)">${d.id}</span>
+            <span style="font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.label}</span>
+          </div>
+          <div style="margin-top:2px;display:flex;gap:6px;align-items:center;font-size:10px;color:var(--muted)">
+            <span class="tabnum" style="${d.on?'color:var(--primary)':''}">${d.on?d.watts:0}W</span>
+            <span>·</span>
+            <span style="${d.on?'color:#059669':''}">${d.on?"ONLINE":"STANDBY"}</span>
+          </div>
+        </div>
+        <button class="switch ${d.on?'on':''}" aria-label="Toggle ${d.label}"></button>`;
+      row.querySelector(".switch").addEventListener("click", ()=>toggle(d.id));
+      list.appendChild(row);
+    });
+    grp.appendChild(list);
+    c.appendChild(grp);
+  });
+}
+
+function renderFeed(){
+  document.getElementById("evct").textContent = feed.length+" events";
+  const marquee = feed.slice(0,8).join("   ◆   ");
+  const spans = document.querySelectorAll("#ticker span");
+  spans.forEach(s=>s.textContent=marquee);
+  const log = document.getElementById("feedlog");
+  log.innerHTML = "";
+  feed.forEach((line,i)=>{
+    const el = document.createElement("div");
+    el.textContent = line;
+    el.style.color = i===0 ? "var(--primary)" : "var(--muted)";
+    el.style.opacity = 1 - Math.min(0.6, i*0.04);
+    log.appendChild(el);
+  });
+}
+
+function renderAll(){ renderPlane(); renderTelemetry(); renderUnits(); renderFeed(); }
+
+/* clock */
+setInterval(()=>{ document.getElementById("clock").textContent = new Date().toLocaleTimeString([],{hour12:false}); }, 1000);
+
+renderAll();
+
+/* =========================================================
+   REAL BACKEND CONNECTION — same deviceStore.js the plain
+   dashboard and Discord bot use. Maps local device ids to backend
+   ids by matching room name + device label.
+   ========================================================= */
+const localToBackendId = {};
+let backendReady = false;
+
+function buildBackendMap(devices){
+  devices.forEach(bd => {
+    const match = DEVICES.find(d => roomName(d.room) === bd.room && d.label === bd.name);
+    if(match) localToBackendId[match.id] = bd.id;
+  });
+}
+
+function applyBackendSnapshot(snapshot){
+  if(!backendReady){
+    buildBackendMap(snapshot.devices);
+    backendReady = true;
+  }
+  snapshot.devices.forEach(bd => {
+    const localId = Object.keys(localToBackendId).find(k => localToBackendId[k] === bd.id);
+    if(!localId) return;
+    const d = DEVICES.find(x => x.id === localId);
+    if(d) { d.on = bd.status === 'ON'; d.watts = bd.wattage; }
+  });
+  renderAll();
+}
+
+let socket = null;
+if (window.io) {
+  socket = io();
+  socket.on('snapshot', applyBackendSnapshot);
+  socket.on('alert', (alert) => pushFeed(`ALERT ${alert.message}`));
+  socket.on('connect', () => pushFeed('[NET] Live backend uplink established'));
+  socket.on('connect_error', () => pushFeed('[NET] Backend unreachable — local demo data only'));
+} else {
+  pushFeed('[NET] Socket.io not found — local demo mode');
+}
+</script>
+
+</body>
+</html>

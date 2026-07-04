@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Office Digital Twin // Walkthrough Simulation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #221208;
+    --panel: rgba(58,32,16,0.88);
+    --panel-border: rgba(240,150,72,0.34);
+    --accent: #ec9a4e;
+    --accent-dim: rgba(236,154,78,0.6);
+    --amber: #ffc06a;
+    --amber-dim: rgba(255,192,106,0.4);
+    --danger: #ff7a52;
+    --text-bright: #fff1da;
+    --text-mid: #e0b78e;
+    --text-dim: #a67d54;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:var(--bg);
+    font-family:'Rajdhani',sans-serif;color:var(--text-bright);}
+  #app{position:fixed;inset:0;}
+
+  #bp-vignette{
+    position:fixed;inset:0;z-index:1;pointer-events:none;
+    background:
+      radial-gradient(ellipse at 50% 38%, rgba(255,192,106,0.09) 0%, transparent 48%),
+      radial-gradient(ellipse at center, transparent 36%, rgba(28,15,7,0.86) 100%);
+  }
+
+  #three-canvas{position:fixed;inset:0;z-index:1;}
+  #three-canvas canvas{display:block;width:100%;height:100%;cursor:default;}
+
+  /* ---------- CROSSHAIR ---------- */
+  #crosshair{
+    position:fixed;top:50%;left:50%;width:14px;height:14px;z-index:8;
+    transform:translate(-50%,-50%);pointer-events:none;opacity:0;transition:opacity .25s;
+  }
+  #crosshair::before, #crosshair::after{
+    content:"";position:absolute;background:var(--amber);
+    box-shadow:0 0 6px rgba(255,180,84,0.8);
+  }
+  #crosshair::before{left:6px;top:0;width:2px;height:14px;border-radius:1px;}
+  #crosshair::after{top:6px;left:0;height:2px;width:14px;border-radius:1px;}
+  #crosshair.dot::before, #crosshair.dot::after{display:none;}
+  #crosshair .ring{position:absolute;inset:-6px;border:1.5px solid rgba(255,192,106,0.55);border-radius:50%;transition:.12s;}
+  #crosshair.active::before, #crosshair.active::after{background:#8fffb0;box-shadow:0 0 8px #8fffb0;}
+  #crosshair.active .ring{border-color:#8fffb0;box-shadow:0 0 10px rgba(143,255,176,0.6);transform:scale(1.25);}
+
+  #interact-label{
+    position:fixed;top:calc(50% + 24px);left:50%;transform:translate(-50%,0);z-index:8;
+    font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--text-bright);
+    background:rgba(30,17,9,0.78);border:1px solid rgba(143,255,176,0.4);border-radius:14px;
+    padding:5px 14px;pointer-events:none;opacity:0;transition:opacity .12s;white-space:nowrap;
+  }
+  #interact-label.show{opacity:1;}
+  #interact-label b{color:#8fffb0;}
+
+  /* ---------- POINTER-LOCK OVERLAY (first entry only) ---------- */
+  #pointer-overlay{
+    position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(ellipse at center, rgba(58,32,16,0.55) 0%, rgba(20,11,5,0.82) 100%);
+    cursor:pointer;
+  }
+  .pointer-card{
+    text-align:center;background:var(--panel);border:1px solid var(--panel-border);
+    border-radius:14px;padding:34px 44px;backdrop-filter:blur(10px);
+    box-shadow:0 0 50px rgba(0,0,0,0.5);max-width:420px;
+  }
+  .pointer-card .picon{font-size:34px;margin-bottom:10px;filter:drop-shadow(0 0 10px rgba(255,192,106,0.5));}
+  .pointer-card h3{margin:0 0 10px;font-size:20px;letter-spacing:1.5px;color:var(--text-bright);text-transform:uppercase;}
+  .pointer-card p{margin:0;font-family:'Space Mono',monospace;font-size:12px;line-height:1.9;color:var(--text-mid);}
+  .pointer-card p b{color:var(--amber);}
+
+  /* ---------- RESUME-WALK PILL (used after the first entry, never covers the HUD) ---------- */
+  #resume-pill{
+    position:fixed;left:50%;bottom:112px;transform:translateX(-50%);z-index:15;
+    display:none;align-items:center;gap:10px;cursor:pointer;
+    background:var(--panel);border:1px solid var(--accent-dim);border-radius:24px;
+    padding:10px 22px;backdrop-filter:blur(8px);box-shadow:0 0 30px rgba(0,0,0,0.5), 0 0 18px rgba(236,154,78,0.18);
+    font-family:'Space Mono',monospace;font-size:12px;letter-spacing:1px;color:var(--text-bright);
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  #resume-pill:hover{transform:translateX(-50%) scale(1.03);box-shadow:0 0 34px rgba(0,0,0,0.55), 0 0 26px rgba(236,154,78,0.3);}
+  #resume-pill .picon{font-size:16px;}
+  #resume-pill b{color:var(--amber);}
+  #resume-pill .sub{display:block;color:var(--text-dim);font-size:10px;letter-spacing:1.5px;margin-top:2px;}
+
+  /* ---------- TOP BAR ---------- */
+  #topbar{
+    position:fixed;top:0;left:0;right:0;z-index:10;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 26px;pointer-events:none;
+  }
+  .brand{display:flex;align-items:center;gap:12px;pointer-events:auto;}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);
+    box-shadow:0 0 10px var(--accent), 0 0 20px var(--accent);animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+  .brand h1{font-size:18px;letter-spacing:3px;font-weight:700;margin:0;color:var(--text-bright);text-transform:uppercase;}
+  .brand span.eyebrow{display:block;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--accent-dim);text-transform:uppercase;}
+
+  .power-readout{pointer-events:auto;text-align:right;background:var(--panel);
+    border:1px solid var(--panel-border);border-radius:8px;padding:8px 20px;
+    backdrop-filter:blur(6px);box-shadow:0 0 24px rgba(224,142,74,0.10);}
+  .power-readout .label{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase;}
+  .power-readout .value{font-family:'Space Mono',monospace;font-size:30px;font-weight:700;color:var(--amber);line-height:1.1;
+    text-shadow:0 0 18px rgba(255,180,84,0.45);}
+  .power-readout .value span{font-size:16px;color:var(--text-mid);margin-left:4px;}
+
+  /* ---------- HINT BAR ---------- */
+  #hint{
+    position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:9;
+    font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--text-mid);
+    background:rgba(43,28,17,0.68);border:1px solid var(--panel-border);border-radius:20px;
+    padding:6px 18px;pointer-events:none;transition:opacity .6s ease;
+  }
+  #hint.fade{opacity:0;}
+
+  /* ---------- SIDE PANELS ---------- */
+  .hud-panel{
+    position:fixed;top:78px;bottom:70px;z-index:10;width:250px;
+    background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;
+    backdrop-filter:blur(8px);box-shadow:0 0 30px rgba(0,0,0,0.4);
+    display:flex;flex-direction:column;overflow:hidden;
+  }
+  #hud-left{left:16px;}
+  #hud-right{right:16px;}
+  .hud-header{padding:12px 16px 10px;border-bottom:1px solid var(--panel-border);flex-shrink:0;}
+  .hud-header h2{margin:0;font-size:14px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);}
+  .hud-header .sub{font-family:'Space Mono',monospace;font-size:10px;color:var(--text-dim);}
+  .hud-body{padding:14px 16px;overflow-y:auto;flex:1;}
+  .hud-body::-webkit-scrollbar{width:5px;}
+  .hud-body::-webkit-scrollbar-thumb{background:var(--panel-border);border-radius:3px;}
+
+  /* Telemetry bars */
+  .room-stat{margin-bottom:18px;}
+  .room-stat .row1{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;}
+  .room-stat .name{font-size:13px;font-weight:600;letter-spacing:.5px;color:var(--text-bright);}
+  .room-stat .watt{font-family:'Space Mono',monospace;font-size:12px;color:var(--amber);}
+  .bar-track{position:relative;width:100%;height:8px;border-radius:4px;background:rgba(255,255,255,0.06);
+    overflow:hidden;border:1px solid rgba(224,142,74,0.14);}
+  .bar-fill{position:absolute;left:0;top:0;bottom:0;border-radius:4px;
+    background:linear-gradient(90deg, var(--accent), var(--amber));
+    box-shadow:0 0 10px rgba(255,180,84,0.5);transition:width .4s ease;}
+
+  .kv{display:flex;justify-content:space-between;font-family:'Space Mono',monospace;font-size:11px;
+    color:var(--text-mid);padding:6px 0;border-bottom:1px dashed rgba(255,255,255,0.06);}
+  .kv b{color:var(--text-bright);font-weight:700;}
+
+  /* Unit list (right) */
+  .unit-group{margin-bottom:14px;}
+  .unit-group-title{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--text-dim);
+    text-transform:uppercase;margin:0 0 8px;padding-bottom:4px;border-bottom:1px solid rgba(255,255,255,0.08);}
+  .unit-row{display:flex;align-items:center;justify-content:space-between;padding:6px 4px;border-radius:6px;
+    transition:background .2s;}
+  .unit-row:hover{background:rgba(224,142,74,0.08);}
+  .unit-row .u-left{display:flex;align-items:center;gap:8px;}
+  .u-icon{width:16px;height:16px;flex-shrink:0;opacity:.85;}
+  .u-name{font-size:13px;color:var(--text-bright);}
+
+  /* toggle switch, tactile game-button style */
+  .switch{position:relative;width:38px;height:20px;flex-shrink:0;}
+  .switch input{opacity:0;width:0;height:0;}
+  .switch .slider{position:absolute;cursor:pointer;inset:0;background:#3a2a1c;
+    border:1px solid rgba(255,255,255,0.12);border-radius:20px;transition:.2s;
+    box-shadow:inset 0 1px 3px rgba(0,0,0,0.6);}
+  .switch .slider:before{content:"";position:absolute;height:14px;width:14px;left:2px;top:2px;
+    background:#7a6350;border-radius:50%;transition:.2s;box-shadow:0 1px 2px rgba(0,0,0,0.5);}
+  .switch input:checked + .slider{background:linear-gradient(180deg, #ffcf82, #ffb454);
+    border-color:rgba(255,180,84,0.6);box-shadow:0 0 10px rgba(255,180,84,0.6), inset 0 1px 2px rgba(255,255,255,0.4);}
+  .switch input:checked + .slider:before{transform:translateX(18px);background:#fff8ec;}
+
+  /* ---------- BOTTOM TICKER ---------- */
+  #ticker-wrap{
+    position:fixed;left:282px;right:282px;bottom:16px;z-index:10;height:38px;
+    background:var(--panel);border:1px solid var(--panel-border);border-radius:8px;
+    overflow:hidden;display:flex;align-items:center;backdrop-filter:blur(8px);
+  }
+  #ticker-label{flex-shrink:0;height:100%;display:flex;align-items:center;gap:6px;padding:0 14px;
+    background:rgba(255,107,82,0.12);border-right:1px solid var(--panel-border);
+    font-family:'Space Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--danger);text-transform:uppercase;}
+  #ticker-label .blip{width:6px;height:6px;border-radius:50%;background:var(--danger);box-shadow:0 0 8px var(--danger);animation:pulse 1.4s infinite;}
+  #ticker-track{white-space:nowrap;font-family:'Space Mono',monospace;font-size:12px;color:var(--text-mid);
+    padding-left:100%;animation:scroll-left 26s linear infinite;}
+  @keyframes scroll-left{from{transform:translateX(0);}to{transform:translateX(-100%);}}
+  #ticker-track .msg{margin-right:60px;}
+  #ticker-track .msg b{color:var(--accent);}
+
+  /* Reset view button */
+  #reset-view{
+    position:fixed;bottom:64px;left:50%;transform:translateX(-50%);z-index:10;
+    font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--text-bright);
+    background:var(--panel);border:1px solid var(--panel-border);border-radius:20px;
+    padding:7px 16px;cursor:pointer;text-transform:uppercase;transition:.2s;
+  }
+  #reset-view:hover{border-color:var(--accent);color:var(--accent);box-shadow:0 0 14px rgba(224,142,74,0.3);}
+
+  @media (max-width: 980px){
+    .hud-panel{width:200px;}
+    #ticker-wrap{left:232px;right:232px;}
+  }
+</style>
+</head>
+<script src="/socket.io/socket.io.js"></script>
+<body>
+<div id="app">
+  <div id="three-canvas"></div>
+  <div id="bp-vignette"></div>
+  <div id="crosshair"><span class="ring"></span></div>
+  <div id="interact-label"></div>
+
+  <div id="pointer-overlay">
+    <div class="pointer-card">
+      <div class="picon">🖱️</div>
+      <h3>Step Inside the Office</h3>
+      <p>Click to enter · <b>Mouse</b> to look around<br><b>WASD</b> to walk through the corridor and doorways<br>Walk up close to a lamp or fan and <b>click</b> to switch it<br><b>Esc</b> anytime to step out and use the dashboard</p>
+    </div>
+  </div>
+
+  <div id="resume-pill">
+    <span class="picon">🚶</span>
+    <span><b>Click to resume walking</b><span class="sub">the dashboard stays live while you're out</span></span>
+  </div>
+
+  <div id="topbar">
+    <div class="brand">
+      <div class="dot"></div>
+      <div>
+        <h1>Office Digital Twin</h1>
+        <span class="eyebrow">Immersive Facility Walkthrough — Sector 01</span>
+      </div>
+    </div>
+    <div class="power-readout">
+      <div class="label">Total Power Draw</div>
+      <div class="value" id="total-power">0<span>W</span></div>
+    </div>
+    <a href="/facility-dashboard.html" style="
+        margin-left:16px;display:flex;align-items:center;gap:6px;
+        padding:8px 14px;border-radius:8px;text-decoration:none;
+        background:rgba(255,192,106,0.15);border:1px solid rgba(255,192,106,0.4);
+        color:#ffc06a;font-weight:600;font-size:12px;letter-spacing:.05em;
+        white-space:nowrap;">
+      ← Back to Dashboard
+    </a>
+  </div>
+
+  <div id="hint">🚶 Walking the floor · walk up close and click a lamp or fan to toggle it</div>
+
+  <!-- LEFT: TELEMETRY -->
+  <div class="hud-panel" id="hud-left">
+    <div class="hud-header">
+      <h2>Telemetry</h2>
+      <div class="sub">REAL-TIME LOAD MONITOR</div>
+    </div>
+    <div class="hud-body" id="telemetry-body"></div>
+  </div>
+
+  <!-- RIGHT: COMMAND CENTER -->
+  <div class="hud-panel" id="hud-right">
+    <div class="hud-header">
+      <h2>Command Center</h2>
+      <div class="sub" id="unit-count-sub">15 UNITS TRACKED</div>
+    </div>
+    <div class="hud-body" id="unit-list-body"></div>
+  </div>
+
+  <button id="reset-view">⟲ Reset View</button>
+
+  <div id="ticker-wrap">
+    <div id="ticker-label"><span class="blip"></span>LIVE FEED</div>
+    <div id="ticker-track"></div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+/* =========================================================
+   CONFIG / STATE
+   ========================================================= */
+const FAN_W = 45;
+const LIGHT_W = 12;
+
+const ROOMS = [
+  { id:'drawing', name:'Drawing Room', x:-9.4, floor:0x74472a, wall:0xe0ba8e, trim:0x4a3320, usage:'Waiting Area', kind:'lounge' },
+  { id:'work1',   name:'Work Room 1',  x:0,    floor:0x835c3a, wall:0xe1cda8, trim:0x4a3320, usage:'Employees',    kind:'desks'  },
+  { id:'work2',   name:'Work Room 2',  x:9.4,  floor:0x8e693e, wall:0xd4b78e, trim:0x4a3320, usage:'Employees',    kind:'desks'  },
+];
+const ROOM_W = 7.6, ROOM_D = 6.2, ROOM_H = 3.2;
+const ROOM_MAX_W = FAN_W*2 + LIGHT_W*3;
+const DOOR_W = 1.7;        // width of each room's doorway into the corridor
+const ENTRY_DOOR_W = 2.3;  // width of the main entrance doorway
+const CORR_NEAR = ROOM_D/2;        // corridor wall aligns with room fronts
+const CORR_FAR  = CORR_NEAR + 3.4; // outer/entrance wall of the corridor
+const CORR_HALF_X = 14.5;          // corridor spans this far left/right
+const PLAYER_RADIUS = 0.38;
+
+const wallSegments = []; // collision: {x1,z1,x2,z2,half}
+function addWall(x1,z1,x2,z2,thickness){
+  wallSegments.push({x1,z1,x2,z2, half:(thickness/2)+0.03});
+}
+
+// initial demo state - a mix of on/off so the twin looks "alive" immediately
+const state = {
+  'drawing-fan-0': true,  'drawing-fan-1': false,
+  'drawing-light-0': true,'drawing-light-1': false,'drawing-light-2': true,
+  'work1-fan-0': false,   'work1-fan-1': true,
+  'work1-light-0': true,  'work1-light-1': true,  'work1-light-2': false,
+  'work2-fan-0': true,    'work2-fan-1': true,
+  'work2-light-0': false, 'work2-light-1': true,  'work2-light-2': true,
+};
+
+const deviceMeta = {}; // id -> {room, type, index, label}
+const deviceMeshes = {}; // id -> {group?, blades?, bulb?, glow?, plight?}
+const clickables = []; // meshes with userData.deviceId
+
+const logMessages = [];
+
+/* =========================================================
+   THREE.JS SCENE
+   ========================================================= */
+const container = document.getElementById('three-canvas');
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x3a2210, 0.020);
+
+const camera = new THREE.PerspectiveCamera(66, window.innerWidth/window.innerHeight, 0.1, 200);
+camera.rotation.order = 'YXZ';
+
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+container.appendChild(renderer.domElement);
+
+// -- base lighting: warm, cozy ambient so toggled lamps still stand out --
+scene.add(new THREE.HemisphereLight(0xffcf9a, 0x3a2210, 0.66));
+const sun = new THREE.DirectionalLight(0xffc98a, 0.58);
+sun.position.set(-12, 20, 14);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024);
+sun.shadow.camera.left = -25; sun.shadow.camera.right = 25;
+sun.shadow.camera.top = 25; sun.shadow.camera.bottom = -25;
+scene.add(sun);
+
+
+function makeLabel(text, color, bg){
+  const canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  if(bg){ ctx.fillStyle = bg; ctx.fillRect(0,0,512,128); }
+  ctx.font = '700 52px Rajdhani, sans-serif';
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = color;
+  ctx.shadowBlur = bg ? 0 : 14;
+  ctx.fillText(text, 256, 64);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map:tex, transparent:!bg, depthWrite:false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(3.4, 0.85, 1);
+  return sprite;
+}
+
+/* ---------- shared materials & simple furniture builders ---------- */
+const woodDark = new THREE.MeshStandardMaterial({ color:0x3f2a18, roughness:0.7 });
+const woodMid  = new THREE.MeshStandardMaterial({ color:0x6b4a2c, roughness:0.65 });
+const metalWarm = new THREE.MeshStandardMaterial({ color:0x8a7256, metalness:0.5, roughness:0.4 });
+const leafMat = new THREE.MeshStandardMaterial({ color:0x4c7a3c, roughness:0.9 });
+const potMat = new THREE.MeshStandardMaterial({ color:0xb5622f, roughness:0.85 });
+const screenMat = new THREE.MeshStandardMaterial({ color:0x2a4b5c, emissive:0x1c3a48, emissiveIntensity:0.7, roughness:0.3 });
+
+function addShadow(mesh){ mesh.castShadow = true; mesh.receiveShadow = true; return mesh; }
+
+function buildSofa(parent, pos, rotY, fabricColor){
+  const g = new THREE.Group();
+  g.position.copy(pos); g.rotation.y = rotY || 0;
+  const fabric = new THREE.MeshStandardMaterial({ color: fabricColor, roughness:0.92 });
+
+  g.add(addShadow(new THREE.Mesh(new THREE.BoxGeometry(1.9,0.32,0.78), fabric)).translateY(0.28));
+  const back = addShadow(new THREE.Mesh(new THREE.BoxGeometry(1.9,0.62,0.18), fabric));
+  back.position.set(0,0.62,-0.30); g.add(back);
+  [-1,1].forEach(s=>{
+    const arm = addShadow(new THREE.Mesh(new THREE.BoxGeometry(0.18,0.42,0.78), fabric));
+    arm.position.set(s*0.99,0.35,0); g.add(arm);
+  });
+  const legGeo = new THREE.CylinderGeometry(0.035,0.035,0.18,8);
+  [[-0.85,-0.28],[0.85,-0.28],[-0.85,0.28],[0.85,0.28]].forEach(([x,z])=>{
+    const leg = new THREE.Mesh(legGeo, woodDark);
+    leg.position.set(x,0.09,z); g.add(leg);
+  });
+  parent.add(g);
+}
+
+function buildCoffeeTable(parent, pos){
+  const g = new THREE.Group();
+  g.position.copy(pos);
+  const top = addShadow(new THREE.Mesh(new THREE.BoxGeometry(1.15,0.06,0.65), woodMid));
+  top.position.y = 0.38; g.add(top);
+  const legGeo = new THREE.CylinderGeometry(0.03,0.03,0.36,8);
+  [[-0.5,-0.26],[0.5,-0.26],[-0.5,0.26],[0.5,0.26]].forEach(([x,z])=>{
+    const leg = new THREE.Mesh(legGeo, woodDark);
+    leg.position.set(x,0.19,z); g.add(leg);
+  });
+  parent.add(g);
+}
+
+function buildPottedPlant(parent, pos, scale){
+  const g = new THREE.Group();
+  g.position.copy(pos);
+  const s = scale || 1;
+  const pot = addShadow(new THREE.Mesh(new THREE.CylinderGeometry(0.16*s,0.12*s,0.24*s,12), potMat));
+  pot.position.y = 0.12*s; g.add(pot);
+  for(let i=0;i<5;i++){
+    const leaf = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.22*s,8,8), leafMat));
+    const a = (i/5)*Math.PI*2;
+    leaf.position.set(Math.cos(a)*0.13*s, (0.5+Math.random()*0.25)*s, Math.sin(a)*0.13*s);
+    leaf.scale.set(1,1.3,1);
+    g.add(leaf);
+  }
+  const top = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.24*s,8,8), leafMat));
+  top.position.y = 0.78*s; g.add(top);
+  parent.add(g);
+}
+
+function buildRug(parent, pos, w, d, color){
+  const rug = new THREE.Mesh(new THREE.BoxGeometry(w,0.02,d), new THREE.MeshStandardMaterial({ color, roughness:1 }));
+  rug.position.copy(pos); rug.position.y = 0.01;
+  rug.receiveShadow = true;
+  parent.add(rug);
+}
+
+function buildWallArt(parent, pos, rotY, color){
+  const g = new THREE.Group();
+  g.position.copy(pos); g.rotation.y = rotY || 0;
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.65,0.04), woodDark);
+  g.add(frame);
+  const canvas = new THREE.Mesh(new THREE.PlaneGeometry(0.76,0.5), new THREE.MeshStandardMaterial({ color, roughness:0.9 }));
+  canvas.position.z = 0.025; g.add(canvas);
+  parent.add(g);
+}
+
+function buildDesk(parent, pos, rotY){
+  const g = new THREE.Group();
+  g.position.copy(pos); g.rotation.y = rotY || 0;
+
+  const top = addShadow(new THREE.Mesh(new THREE.BoxGeometry(1.4,0.05,0.7), woodMid));
+  top.position.y = 0.74; g.add(top);
+  const legGeo = new THREE.BoxGeometry(0.06,0.74,0.06);
+  [[-0.63,-0.30],[0.63,-0.30],[-0.63,0.30],[0.63,0.30]].forEach(([x,z])=>{
+    const leg = new THREE.Mesh(legGeo, woodDark);
+    leg.position.set(x,0.37,z); g.add(leg);
+  });
+
+  // monitor near the back edge
+  const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.07,0.14,10), metalWarm);
+  stand.position.set(0,0.83,-0.24); g.add(stand);
+  const screen = addShadow(new THREE.Mesh(new THREE.BoxGeometry(0.5,0.32,0.03), screenMat));
+  screen.position.set(0,1.04,-0.26); g.add(screen);
+
+  // keyboard
+  const kb = new THREE.Mesh(new THREE.BoxGeometry(0.34,0.02,0.14), new THREE.MeshStandardMaterial({color:0x2a2018}));
+  kb.position.set(0,0.775,0.02); g.add(kb);
+
+  // desk lamp
+  const lampBase = new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,0.02,10), metalWarm);
+  lampBase.position.set(0.55,0.775,-0.2); g.add(lampBase);
+  const lampArm = new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.012,0.28,6), metalWarm);
+  lampArm.position.set(0.55,0.92,-0.2); g.add(lampArm);
+  const lampHead = new THREE.Mesh(new THREE.ConeGeometry(0.06,0.09,10), new THREE.MeshStandardMaterial({color:0xffcf82, emissive:0xffb454, emissiveIntensity:0.5}));
+  lampHead.position.set(0.6,1.02,-0.2); lampHead.rotation.z = 0.6; g.add(lampHead);
+
+  // chair, sits on the room-side of the desk
+  const chairGroup = new THREE.Group();
+  chairGroup.position.set(0,0,0.62);
+  const seat = addShadow(new THREE.Mesh(new THREE.CylinderGeometry(0.24,0.24,0.06,16), new THREE.MeshStandardMaterial({color:0x5c3a28, roughness:0.85})));
+  seat.position.y = 0.46; chairGroup.add(seat);
+  const chairBack = addShadow(new THREE.Mesh(new THREE.BoxGeometry(0.42,0.42,0.06), new THREE.MeshStandardMaterial({color:0x5c3a28, roughness:0.85})));
+  chairBack.position.set(0,0.7,0.2); chairGroup.add(chairBack);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,0.42,8), metalWarm);
+  pole.position.y = 0.24; chairGroup.add(pole);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.22,0.02,12), metalWarm);
+  base.position.y = 0.03; chairGroup.add(base);
+  g.add(chairGroup);
+
+  parent.add(g);
+}
+
+function buildShelf(parent, pos, rotY){
+  const g = new THREE.Group();
+  g.position.copy(pos); g.rotation.y = rotY || 0;
+  const frame = addShadow(new THREE.Mesh(new THREE.BoxGeometry(1.2,1.7,0.32), woodDark));
+  frame.position.y = 0.85; g.add(frame);
+  const bookColors = [0xb5714a,0xd9a441,0x7a8f5c,0xc25c3e,0x8a6a4a];
+  for(let shelf=0; shelf<3; shelf++){
+    let x = -0.5;
+    while(x < 0.5){
+      const w = 0.06 + Math.random()*0.05;
+      if(x + w > 0.55) break;
+      const h = 0.22 + Math.random()*0.14;
+      const book = new THREE.Mesh(new THREE.BoxGeometry(w,h,0.24), new THREE.MeshStandardMaterial({color: bookColors[Math.floor(Math.random()*bookColors.length)], roughness:0.8}));
+      book.position.set(x, 0.35 + shelf*0.5 + h/2, 0.02);
+      g.add(book);
+      x += w + 0.01;
+    }
+  }
+  parent.add(g);
+}
+
+function buildWindow(parent, pos, rotY){
+  const g = new THREE.Group();
+  g.position.copy(pos); g.rotation.y = rotY || 0;
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(2.2,1.5), new THREE.MeshBasicMaterial({ color:0xffdca0 }));
+  g.add(glow);
+  const frameMat = woodDark;
+  const bar = (w,h,x,y)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,0.05), frameMat); m.position.set(x,y,0.03); g.add(m); };
+  bar(2.3,0.08,0,0.79); bar(2.3,0.08,0,-0.79);
+  bar(0.08,1.5,-1.15,0); bar(0.08,1.5,1.15,0);
+  bar(0.06,1.5,0,0); bar(2.3,0.06,0,0);
+  const light = new THREE.PointLight(0xffd9a0, 0.5, 6, 2);
+  light.position.set(0,0,0.6);
+  g.add(light);
+  parent.add(g);
+}
+
+// -- exterior ground, only visible through the entrance doorway --
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(70,70),
+  new THREE.MeshStandardMaterial({ color:0x2a1d10, roughness:1 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.position.y = -0.12;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const DOOR_H = 2.35;
+const corridorWallMat = new THREE.MeshStandardMaterial({ color:0xc79a68, roughness:0.88 });
+
+function buildWallX(xStart, xEnd, z, height, thickness, mat){ // wall running along X at fixed z
+  const mesh = addShadow(new THREE.Mesh(new THREE.BoxGeometry(Math.abs(xEnd-xStart), height, thickness), mat));
+  mesh.position.set((xStart+xEnd)/2, height/2, z);
+  scene.add(mesh);
+  addWall(xStart, z, xEnd, z, thickness);
+  return mesh;
+}
+function buildWallZ(zStart, zEnd, x, height, thickness, mat){ // wall running along Z at fixed x
+  const mesh = addShadow(new THREE.Mesh(new THREE.BoxGeometry(thickness, height, Math.abs(zEnd-zStart)), mat));
+  mesh.position.set(x, height/2, (zStart+zEnd)/2);
+  scene.add(mesh);
+  addWall(x, zStart, x, zEnd, thickness);
+  return mesh;
+}
+function buildDoorTrim(cx, z, doorWidth){
+  [-1,1].forEach(s=>{
+    const post = addShadow(new THREE.Mesh(new THREE.BoxGeometry(0.1, DOOR_H, 0.22), woodDark));
+    post.position.set(cx + s*doorWidth/2, DOOR_H/2, z);
+    scene.add(post);
+  });
+  const lintel = addShadow(new THREE.Mesh(new THREE.BoxGeometry(doorWidth+0.24, 0.14, 0.22), woodDark));
+  lintel.position.set(cx, DOOR_H+0.07, z);
+  scene.add(lintel);
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(doorWidth*0.85,0.5),
+    new THREE.MeshBasicMaterial({ color:0xffcf82, transparent:true, opacity:0.16, blending:THREE.AdditiveBlending, depthWrite:false }));
+  glow.rotation.x = -Math.PI/2;
+  glow.position.set(cx, 0.015, z);
+  scene.add(glow);
+}
+function buildCorridorLamp(x,z){
+  const holder = new THREE.Group();
+  holder.position.set(x, ROOM_H-0.05, z);
+  const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.015,0.3,6), metalWarm);
+  wire.position.y = -0.15; holder.add(wire);
+  const shade = new THREE.Mesh(new THREE.ConeGeometry(0.26,0.18,16,1,true),
+    new THREE.MeshStandardMaterial({ color:0x5a4530, roughness:0.5, side:THREE.DoubleSide }));
+  shade.position.y = -0.32; holder.add(shade);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.1,14,14),
+    new THREE.MeshStandardMaterial({ color:0xffdca0, emissive:0xffcf82, emissiveIntensity:1.6 }));
+  bulb.position.y = -0.42; holder.add(bulb);
+  const light = new THREE.PointLight(0xffd9a0, 0.9, 7.5, 2);
+  light.position.y = -0.42; holder.add(light);
+  scene.add(holder);
+}
+
+// corridor floor (warm wood-plank walkway, spans the whole building width)
+const corridor = new THREE.Mesh(
+  new THREE.BoxGeometry(CORR_HALF_X*2, 0.18, CORR_FAR-CORR_NEAR),
+  new THREE.MeshStandardMaterial({ color:0xa9835a, roughness:0.85 })
+);
+corridor.position.set(0, -0.05, (CORR_NEAR+CORR_FAR)/2);
+corridor.receiveShadow = true;
+scene.add(corridor);
+// plank seams, purely decorative
+for(let i=-13; i<=13; i+=1.9){
+  const seam = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.19, CORR_FAR-CORR_NEAR), new THREE.MeshBasicMaterial({color:0x5a4128}));
+  seam.position.set(i, -0.05, (CORR_NEAR+CORR_FAR)/2);
+  scene.add(seam);
+}
+
+// corridor ceiling, closes the hallway overhead
+const corrCeiling = new THREE.Mesh(
+  new THREE.PlaneGeometry(CORR_HALF_X*2, CORR_FAR-CORR_NEAR),
+  new THREE.MeshStandardMaterial({ color:0xf1e3cb, roughness:1, side:THREE.DoubleSide })
+);
+corrCeiling.rotation.x = Math.PI/2;
+corrCeiling.position.set(0, ROOM_H-0.01, (CORR_NEAR+CORR_FAR)/2);
+corrCeiling.receiveShadow = true;
+scene.add(corrCeiling);
+
+// back wall of the corridor (shared with the rooms) — solid except one doorway per room
+let cursorX = -CORR_HALF_X;
+ROOMS.map(r=>r.x).slice().sort((a,b)=>a-b).forEach(cx=>{
+  const gapStart = cx - DOOR_W/2, gapEnd = cx + DOOR_W/2;
+  if(gapStart > cursorX) buildWallX(cursorX, gapStart, CORR_NEAR, ROOM_H, 0.14, corridorWallMat);
+  buildDoorTrim(cx, CORR_NEAR, DOOR_W);
+  cursorX = gapEnd;
+});
+if(cursorX < CORR_HALF_X) buildWallX(cursorX, CORR_HALF_X, CORR_NEAR, ROOM_H, 0.14, corridorWallMat);
+
+// front (entrance) wall of the corridor — a single main doorway
+buildWallX(-CORR_HALF_X, -ENTRY_DOOR_W/2, CORR_FAR, ROOM_H, 0.16, corridorWallMat);
+buildWallX(ENTRY_DOOR_W/2, CORR_HALF_X, CORR_FAR, ROOM_H, 0.16, corridorWallMat);
+buildDoorTrim(0, CORR_FAR, ENTRY_DOOR_W);
+
+// end walls, closing the two ends of the hallway
+buildWallZ(CORR_NEAR, CORR_FAR, -CORR_HALF_X, ROOM_H, 0.16, corridorWallMat);
+buildWallZ(CORR_NEAR, CORR_FAR, CORR_HALF_X, ROOM_H, 0.16, corridorWallMat);
+
+// warm pendant lights lighting the enclosed hallway
+[-9.4, -4.7, 0, 4.7, 9.4].forEach(x => buildCorridorLamp(x, (CORR_NEAR+CORR_FAR)/2));
+
+// entry sign, mounted outside above the main doorway
+const entrySprite = makeLabel('ENTRY', '#ffcf82');
+entrySprite.position.set(0, ROOM_H + 0.35, CORR_FAR + 0.12);
+scene.add(entrySprite);
+
+/* ---------- build each room ---------- */
+ROOMS.forEach(room => buildRoom(room));
+
+function buildRoom(room){
+  const group = new THREE.Group();
+  group.position.set(room.x, 0, 0);
+  scene.add(group);
+
+  // floor
+  const floor = new THREE.Mesh(
+    new THREE.BoxGeometry(ROOM_W, 0.2, ROOM_D),
+    new THREE.MeshStandardMaterial({ color: room.floor, roughness:0.75 })
+  );
+  floor.position.y = -0.1;
+  floor.receiveShadow = true;
+  group.add(floor);
+
+  // solid warm walls (opaque, painted plaster over a wood baseboard)
+  const wallMat = new THREE.MeshStandardMaterial({ color: room.wall, roughness:0.92 });
+  const baseboardMat = woodDark;
+
+  const backWall = addShadow(new THREE.Mesh(new THREE.BoxGeometry(ROOM_W, ROOM_H, 0.14), wallMat));
+  backWall.position.set(0, ROOM_H/2, -ROOM_D/2);
+  group.add(backWall);
+  const leftWall = addShadow(new THREE.Mesh(new THREE.BoxGeometry(0.14, ROOM_H, ROOM_D), wallMat));
+  leftWall.position.set(-ROOM_W/2, ROOM_H/2, 0);
+  group.add(leftWall);
+  const rightWall = addShadow(new THREE.Mesh(new THREE.BoxGeometry(0.14, ROOM_H, ROOM_D), wallMat));
+  rightWall.position.set(ROOM_W/2, ROOM_H/2, 0);
+  group.add(rightWall);
+
+  // front wall closes the room off from the corridor, leaving only the doorway open
+  const frontSpan = (ROOM_W - DOOR_W) / 2;
+  const frontL = addShadow(new THREE.Mesh(new THREE.BoxGeometry(frontSpan, ROOM_H, 0.14), wallMat));
+  frontL.position.set(-(DOOR_W/2 + frontSpan/2), ROOM_H/2, ROOM_D/2);
+  group.add(frontL);
+  const frontR = addShadow(new THREE.Mesh(new THREE.BoxGeometry(frontSpan, ROOM_H, 0.14), wallMat));
+  frontR.position.set(DOOR_W/2 + frontSpan/2, ROOM_H/2, ROOM_D/2);
+  group.add(frontR);
+  buildDoorTrim(room.x, ROOM_D/2, DOOR_W);
+
+  // baseboards
+  [backWall, leftWall, rightWall, frontL, frontR].forEach(w=>{
+    const bb = new THREE.Mesh(new THREE.BoxGeometry(w.geometry.parameters.width+0.02, 0.14, w.geometry.parameters.depth+0.02), baseboardMat);
+    bb.position.copy(w.position); bb.position.y = 0.07;
+    group.add(bb);
+  });
+
+  // register world-space collision for every wall of this room (group is offset by room.x on X only)
+  addWall(room.x-ROOM_W/2, -ROOM_D/2, room.x+ROOM_W/2, -ROOM_D/2, 0.14); // back
+  addWall(room.x-ROOM_W/2, -ROOM_D/2, room.x-ROOM_W/2, ROOM_D/2, 0.14);  // left
+  addWall(room.x+ROOM_W/2, -ROOM_D/2, room.x+ROOM_W/2, ROOM_D/2, 0.14);  // right
+  addWall(room.x-ROOM_W/2, ROOM_D/2, room.x-DOOR_W/2, ROOM_D/2, 0.14);   // front-left of doorway
+  addWall(room.x+DOOR_W/2, ROOM_D/2, room.x+ROOM_W/2, ROOM_D/2, 0.14);   // front-right of doorway
+
+  // ceiling
+  const ceiling = new THREE.Mesh(
+    new THREE.PlaneGeometry(ROOM_W, ROOM_D),
+    new THREE.MeshStandardMaterial({ color:0xf1e3cb, roughness:1, side:THREE.DoubleSide })
+  );
+  ceiling.rotation.x = Math.PI/2;
+  ceiling.position.y = ROOM_H - 0.01;
+  ceiling.receiveShadow = true;
+  group.add(ceiling);
+
+  // exposed ceiling beams, purely decorative warmth
+  for(let bx=-ROOM_W/2+0.9; bx<ROOM_W/2; bx+=1.8){
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, ROOM_D-0.1), woodDark);
+    beam.position.set(bx, ROOM_H-0.08, 0);
+    group.add(beam);
+  }
+
+  // window on the back wall, warm daylight glow
+  buildWindow(group, new THREE.Vector3(0, ROOM_H*0.56, -ROOM_D/2 + 0.09), 0);
+
+  // room name sign above the entrance
+  const label = makeLabel(room.name, '#2b1c11', '#f1e3cb');
+  label.position.set(0, ROOM_H + 0.45, ROOM_D/2 + 0.05);
+  label.scale.set(2.6, 0.65, 1);
+  group.add(label);
+
+  // ---- furniture, distinct per room "kind" ----
+  if(room.kind === 'lounge'){
+    buildSofa(group, new THREE.Vector3(0, 0, -2.55), 0, 0xb5714a);
+    buildCoffeeTable(group, new THREE.Vector3(0, 0, -1.35));
+    buildPottedPlant(group, new THREE.Vector3(-3.05, 0, -2.6), 1.1);
+    buildPottedPlant(group, new THREE.Vector3(3.05, 0, -2.6), 1.1);
+    buildWallArt(group, new THREE.Vector3(-3.28, 1.9, -0.6), Math.PI/2, 0xc9773f);
+    buildWallArt(group, new THREE.Vector3(3.28, 1.9, -0.6), -Math.PI/2, 0x7a8f5c);
+    buildRug(group, new THREE.Vector3(0,0,-1.7), 3.4, 2.4, 0x8a4c2c);
+  } else {
+    buildDesk(group, new THREE.Vector3(-2.1, 0, -2.55), 0);
+    buildDesk(group, new THREE.Vector3(2.1, 0, -2.55), 0);
+    buildDesk(group, new THREE.Vector3(-3.35, 0, 0.4), Math.PI/2);
+    buildShelf(group, new THREE.Vector3(3.35, 0, 1.4), -Math.PI/2);
+    buildPottedPlant(group, new THREE.Vector3(3.2, 0, -2.75), 0.9);
+    buildRug(group, new THREE.Vector3(0,0,-1.1), 4.2, 3.0, 0x5a3e26);
+  }
+
+  // ---- fans (2 per room), spaced along Z ----
+  const fanZ = [-ROOM_D/4, ROOM_D/4];
+  fanZ.forEach((z, i) => {
+    const id = `${room.id}-fan-${i}`;
+    deviceMeta[id] = { room: room.id, roomName: room.name, type:'fan', index:i, label:`Fan ${i+1}` };
+    buildFan(group, id, new THREE.Vector3(0, ROOM_H - 0.15, z));
+  });
+
+  // ---- lights (3 per room), spaced along X ----
+  const lightX = [-ROOM_W/3, 0, ROOM_W/3];
+  lightX.forEach((x, i) => {
+    const id = `${room.id}-light-${i}`;
+    deviceMeta[id] = { room: room.id, roomName: room.name, type:'light', index:i, label:`Light ${i+1}` };
+    buildLight(group, id, new THREE.Vector3(x, ROOM_H - 0.1, -ROOM_D/6));
+  });
+}
+
+function buildFan(parent, id, pos){
+  const fanGroup = new THREE.Group();
+  fanGroup.position.copy(pos);
+
+  // mount pole
+  const pole = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.03, 0.03, 0.18, 8),
+    metalWarm
+  );
+  pole.position.y = 0.09;
+  fanGroup.add(pole);
+
+  const hub = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.12, 0.12, 0.1, 12),
+    new THREE.MeshStandardMaterial({ color:0x5a4530, metalness:0.5, roughness:0.4 })
+  );
+  fanGroup.add(hub);
+
+  const bladesGroup = new THREE.Group();
+  const bladeMat = new THREE.MeshStandardMaterial({ color:0xb8895f, metalness:0.15, roughness:0.55, side:THREE.DoubleSide });
+  for(let b=0; b<3; b++){
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.03, 0.16), bladeMat);
+    blade.position.x = 0.45;
+    const pivot = new THREE.Group();
+    pivot.rotation.y = (b/3) * Math.PI*2;
+    pivot.add(blade);
+    bladesGroup.add(pivot);
+  }
+  fanGroup.add(bladesGroup);
+
+  // invisible larger hitbox for easy clicking
+  const hitbox = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.6, 0.6, 0.5, 10),
+    new THREE.MeshBasicMaterial({ visible:false })
+  );
+  hitbox.userData = { deviceId:id };
+  fanGroup.add(hitbox);
+  clickables.push(hitbox);
+
+  parent.add(fanGroup);
+  deviceMeshes[id] = { group: fanGroup, blades: bladesGroup, hub };
+  applyFanVisual(id, state[id]);
+}
+
+function buildLight(parent, id, pos){
+  const holder = new THREE.Group();
+  holder.position.copy(pos);
+
+  // pendant shade (cone) around the bulb, warm bronze
+  const shade = new THREE.Mesh(
+    new THREE.ConeGeometry(0.22, 0.16, 16, 1, true),
+    new THREE.MeshStandardMaterial({ color:0x5a4530, roughness:0.55, side:THREE.DoubleSide })
+  );
+  shade.position.y = -0.02;
+  holder.add(shade);
+
+  const fixture = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.03, 0.03, 0.14, 10),
+    metalWarm
+  );
+  fixture.position.y = 0.05;
+  holder.add(fixture);
+
+  const bulb = new THREE.Mesh(
+    new THREE.SphereGeometry(0.11, 16, 16),
+    new THREE.MeshStandardMaterial({ color:0x554422, emissive:0x000000, emissiveIntensity:0 })
+  );
+  bulb.position.y = -0.14;
+  holder.add(bulb);
+
+  const plight = new THREE.PointLight(0xffd9a0, 0, 6.5, 2);
+  plight.position.y = -0.16;
+  plight.castShadow = false;
+  holder.add(plight);
+
+  // soft floor glow disc
+  const glow = new THREE.Mesh(
+    new THREE.CircleGeometry(1.15, 24),
+    new THREE.MeshBasicMaterial({ color:0xffd9a0, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false })
+  );
+  glow.rotation.x = -Math.PI/2;
+  glow.position.set(0, -(ROOM_H - 0.12), 0); // project down to floor
+  holder.add(glow);
+
+  const hitbox = new THREE.Mesh(
+    new THREE.SphereGeometry(0.45, 10, 10),
+    new THREE.MeshBasicMaterial({ visible:false })
+  );
+  hitbox.userData = { deviceId:id };
+  holder.add(hitbox);
+  clickables.push(hitbox);
+
+  parent.add(holder);
+  deviceMeshes[id] = { holder, bulb, plight, glow };
+  applyLightVisual(id, state[id]);
+}
+
+function applyFanVisual(id, on){
+  const m = deviceMeshes[id];
+  if(!m) return;
+  m.hub.material.emissive = new THREE.Color(on ? 0x8a5a20 : 0x000000);
+  m.hub.material.emissiveIntensity = on ? 0.7 : 0;
+}
+
+function applyLightVisual(id, on){
+  const m = deviceMeshes[id];
+  if(!m) return;
+  m.bulb.material.emissive = new THREE.Color(on ? 0xffcf82 : 0x1a1408);
+  m.bulb.material.emissiveIntensity = on ? 2.2 : 0;
+  m.plight.intensity = on ? 1.15 : 0;
+  m.glow.material.opacity = on ? 0.4 : 0;
+}
+
+/* =========================================================
+   FIRST-PERSON WALKTHROUGH CONTROLS
+   Pointer-lock mouse look + WASD movement, click-to-toggle
+   devices via a center-screen raycast (crosshair).
+   ========================================================= */
+const EYE_HEIGHT = 1.65;
+const INTERACT_RANGE = 2.6; // how close you must walk up to a lamp/fan to switch it, like a game
+const START_POS = new THREE.Vector3(0, EYE_HEIGHT, CORR_FAR + 3.4); // just outside the main entrance
+let yaw = 0;      // yaw 0 looks toward -Z, i.e. straight into the building from the entry
+let pitch = -0.05;
+
+camera.position.copy(START_POS);
+camera.rotation.set(pitch, yaw, 0, 'YXZ');
+
+const overlay = document.getElementById('pointer-overlay');
+const resumePill = document.getElementById('resume-pill');
+const crosshair = document.getElementById('crosshair');
+const interactLabel = document.getElementById('interact-label');
+const hint = document.getElementById('hint');
+let hasEnteredOnce = false;
+
+function requestLock(){ document.body.requestPointerLock(); }
+overlay.addEventListener('click', requestLock);
+resumePill.addEventListener('click', requestLock);
+// clicking anywhere in the 3D view (not the HUD) also resumes walking once you've been in before
+document.getElementById('three-canvas').addEventListener('click', () => {
+  if(hasEnteredOnce && document.pointerLockElement !== document.body) requestLock();
+});
+
+document.addEventListener('pointerlockchange', () => {
+  const locked = document.pointerLockElement === document.body;
+  crosshair.style.opacity = locked ? '1' : '0';
+  if(locked){
+    hasEnteredOnce = true;
+    overlay.style.display = 'none';
+    resumePill.style.display = 'none';
+    interactLabel.classList.remove('show');
+    hint.classList.remove('fade');
+    setTimeout(() => hint.classList.add('fade'), 9000);
+  } else {
+    // IMPORTANT: never let a full-screen overlay cover the dashboard again once
+    // the person has entered once — just show a small pill that doesn't block the HUD.
+    if(hasEnteredOnce){
+      overlay.style.display = 'none';
+      resumePill.style.display = 'flex';
+    } else {
+      overlay.style.display = 'flex';
+    }
+  }
+});
+
+document.addEventListener('mousemove', (e) => {
+  if(document.pointerLockElement !== document.body) return;
+  yaw -= e.movementX * 0.0022;
+  pitch -= e.movementY * 0.0022;
+  pitch = Math.max(-1.3, Math.min(1.3, pitch));
+  camera.rotation.set(pitch, yaw, 0, 'YXZ');
+});
+
+const raycaster = new THREE.Raycaster();
+function raycastTarget(){
+  raycaster.setFromCamera({ x:0, y:0 }, camera);
+  const hits = raycaster.intersectObjects(clickables, false);
+  return hits.find(h => h.object.userData && h.object.userData.deviceId);
+}
+
+document.addEventListener('click', (e) => {
+  if(e.target.closest('.hud-panel') || e.target.closest('#reset-view')) return;
+  if(document.pointerLockElement !== document.body) return; // overlay/pill click handles the lock request
+  const hit = raycastTarget();
+  if(hit && hit.distance <= INTERACT_RANGE){
+    const id = hit.object.userData.deviceId;
+    toggleDevice(id, !state[id], true);
+  }
+});
+
+/* ---------- WASD WALK ---------- */
+const keys = {};
+window.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; });
+window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+const clock = new THREE.Clock();
+const WALK_SPEED = 4.4;
+let walkTime = 0;
+
+// swept-circle vs wall-segment collision so you bump into walls and must use the doorways, like a game
+function resolveCollisions(x, z){
+  let px = x, pz = z;
+  for(let iter=0; iter<3; iter++){
+    for(const seg of wallSegments){
+      const dx = seg.x2-seg.x1, dz = seg.z2-seg.z1;
+      const lenSq = dx*dx + dz*dz;
+      let t = lenSq > 0 ? ((px-seg.x1)*dx + (pz-seg.z1)*dz) / lenSq : 0;
+      t = Math.max(0, Math.min(1, t));
+      const cx = seg.x1 + t*dx, cz = seg.z1 + t*dz;
+      const distX = px-cx, distZ = pz-cz;
+      const dist = Math.hypot(distX, distZ);
+      const minDist = seg.half + PLAYER_RADIUS;
+      if(dist < minDist){
+        const push = dist > 0.0001 ? (minDist-dist)/dist : minDist;
+        px += (dist > 0.0001 ? distX*push : minDist);
+        pz += (dist > 0.0001 ? distZ*push : 0);
+      }
+    }
+  }
+  return { x: px, z: pz };
+}
+
+function updateWalk(dt){
+  const euler = new THREE.Euler(0, yaw, 0, 'YXZ');
+  const forward = new THREE.Vector3(0,0,-1).applyEuler(euler);
+  const right = new THREE.Vector3(1,0,0).applyEuler(euler);
+  const move = new THREE.Vector3();
+  if(keys['w'] || keys['arrowup']) move.add(forward);
+  if(keys['s'] || keys['arrowdown']) move.sub(forward);
+  if(keys['d'] || keys['arrowright']) move.add(right);
+  if(keys['a'] || keys['arrowleft']) move.sub(right);
+
+  if(move.lengthSq() > 0 && document.pointerLockElement === document.body){
+    move.normalize().multiplyScalar(WALK_SPEED * dt);
+    const target = resolveCollisions(camera.position.x + move.x, camera.position.z + move.z);
+    camera.position.x = Math.max(-CORR_HALF_X-2, Math.min(CORR_HALF_X+2, target.x));
+    camera.position.z = Math.max(-ROOM_D, Math.min(CORR_FAR+16, target.z));
+    walkTime += dt;
+    camera.position.y = EYE_HEIGHT + Math.sin(walkTime * 9) * 0.02;
+    hint.classList.add('fade');
+  } else {
+    camera.position.y += (EYE_HEIGHT - camera.position.y) * 0.2;
+  }
+
+  // proximity-based interaction prompt, updated every frame while walking
+  if(document.pointerLockElement === document.body){
+    const hit = raycastTarget();
+    if(hit && hit.distance <= INTERACT_RANGE){
+      const meta = deviceMeta[hit.object.userData.deviceId];
+      crosshair.classList.add('active');
+      interactLabel.innerHTML = `<b>${meta.roomName} · ${meta.label}</b> — click to switch ${state[hit.object.userData.deviceId] ? 'off' : 'on'}`;
+      interactLabel.classList.add('show');
+    } else {
+      crosshair.classList.remove('active');
+      interactLabel.classList.remove('show');
+    }
+  } else {
+    crosshair.classList.remove('active');
+    interactLabel.classList.remove('show');
+  }
+}
+
+document.getElementById('reset-view').addEventListener('click', () => {
+  camera.position.copy(START_POS);
+  yaw = 0; pitch = -0.05;
+  camera.rotation.set(pitch, yaw, 0, 'YXZ');
+});
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  updateWalk(dt);
+
+  // spin any active fan blades
+  Object.entries(deviceMeshes).forEach(([id, m]) => {
+    if(m.blades && state[id]) m.blades.rotation.y += dt * 6.5;
+  });
+
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* =========================================================
+   DASHBOARD / HUD (synced both directions with the 3D scene)
+   ========================================================= */
+const iconFan = `<svg class="u-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="2"/><path d="M12 10c0-3 1.5-6 4-6s2 4-1 6"/><path d="M12 14c0 3-1.5 6-4 6s-2-4 1-6"/><path d="M10 12c-3 0-6-1.5-6-4s4-2 6 1"/><path d="M14 12c3 0 6 1.5 6 4s-4 2-6-1"/></svg>`;
+const iconBulb = `<svg class="u-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2.3h6c0-1.1.4-1.8 1-2.3A7 7 0 0 0 12 2Z"/></svg>`;
+
+function buildTelemetry(){
+  const el = document.getElementById('telemetry-body');
+  el.innerHTML = '';
+  ROOMS.forEach(room => {
+    const watt = roomWatt(room.id);
+    const pct = Math.min(100, (watt/ROOM_MAX_W)*100);
+    const div = document.createElement('div');
+    div.className = 'room-stat';
+    div.innerHTML = `
+      <div class="row1"><span class="name">${room.name}</span><span class="watt" id="rw-${room.id}">${watt} W</span></div>
+      <div class="bar-track"><div class="bar-fill" id="rb-${room.id}" style="width:${pct}%"></div></div>
+    `;
+    el.appendChild(div);
+  });
+  const summary = document.createElement('div');
+  summary.style.marginTop = '18px';
+  summary.innerHTML = `
+    <div class="kv"><span>Rooms</span><b>3</b></div>
+    <div class="kv"><span>Devices Online</span><b id="devices-online">0 / 15</b></div>
+    <div class="kv"><span>Fans Active</span><b id="fans-active">0 / 6</b></div>
+    <div class="kv"><span>Lights Active</span><b id="lights-active">0 / 9</b></div>
+    <div class="kv" style="border-bottom:none;"><span>Est. Today</span><b id="kwh-today">0.00 kWh</b></div>
+  `;
+  el.appendChild(summary);
+}
+
+function buildUnitList(){
+  const el = document.getElementById('unit-list-body');
+  el.innerHTML = '';
+  ROOMS.forEach(room => {
+    const groupWrap = document.createElement('div');
+    groupWrap.className = 'unit-group';
+    groupWrap.innerHTML = `<div class="unit-group-title">${room.name} · ${room.usage}</div>`;
+    Object.keys(deviceMeta).filter(id => deviceMeta[id].room === room.id)
+      .sort((a,b) => deviceMeta[a].type.localeCompare(deviceMeta[b].type) || deviceMeta[a].index - deviceMeta[b].index)
+      .forEach(id => {
+        const meta = deviceMeta[id];
+        const row = document.createElement('div');
+        row.className = 'unit-row';
+        row.innerHTML = `
+          <div class="u-left">${meta.type==='fan'?iconFan:iconBulb}<span class="u-name">${meta.label}</span></div>
+          <label class="switch">
+            <input type="checkbox" id="chk-${id}" ${state[id] ? 'checked':''}>
+            <span class="slider"></span>
+          </label>
+        `;
+        groupWrap.appendChild(row);
+      });
+    el.appendChild(groupWrap);
+  });
+
+  // wire up checkbox events
+  Object.keys(deviceMeta).forEach(id => {
+    document.getElementById(`chk-${id}`).addEventListener('change', (e) => {
+      toggleDevice(id, e.target.checked, false);
+    });
+  });
+}
+
+function roomWatt(roomId){
+  return Object.keys(deviceMeta).filter(id => deviceMeta[id].room === roomId)
+    .reduce((sum,id) => sum + (state[id] ? (deviceMeta[id].type==='fan'?FAN_W:LIGHT_W) : 0), 0);
+}
+function totalWatt(){
+  return Object.keys(deviceMeta).reduce((sum,id) => sum + (state[id] ? (deviceMeta[id].type==='fan'?FAN_W:LIGHT_W) : 0), 0);
+}
+
+function refreshDashboard(){
+  ROOMS.forEach(room => {
+    const watt = roomWatt(room.id);
+    const pct = Math.min(100, (watt/ROOM_MAX_W)*100);
+    const wEl = document.getElementById(`rw-${room.id}`);
+    const bEl = document.getElementById(`rb-${room.id}`);
+    if(wEl) wEl.textContent = `${watt} W`;
+    if(bEl) bEl.style.width = `${pct}%`;
+  });
+  const total = totalWatt();
+  document.getElementById('total-power').innerHTML = `${total}<span>W</span>`;
+
+  const onIds = Object.keys(deviceMeta).filter(id => state[id]);
+  const fansOn = onIds.filter(id => deviceMeta[id].type==='fan').length;
+  const lightsOn = onIds.filter(id => deviceMeta[id].type==='light').length;
+  document.getElementById('devices-online').textContent = `${onIds.length} / 15`;
+  document.getElementById('fans-active').textContent = `${fansOn} / 6`;
+  document.getElementById('lights-active').textContent = `${lightsOn} / 9`;
+  document.getElementById('kwh-today').textContent = `${(total * 0.16 / 1000).toFixed(2)} kWh`;
+  document.getElementById('unit-count-sub').textContent = `${onIds.length} UNITS ACTIVE / 15 TOTAL`;
+}
+
+function toggleDevice(id, on, fromScene){
+  state[id] = on;
+  const meta = deviceMeta[id];
+
+  // sync 3D
+  if(meta.type === 'fan') applyFanVisual(id, on);
+  else applyLightVisual(id, on);
+
+  // sync checkbox
+  const chk = document.getElementById(`chk-${id}`);
+  if(chk) chk.checked = on;
+
+  refreshDashboard();
+  pushLog(`${meta.roomName} ${meta.label} switched ${on ? 'ON' : 'OFF'}${fromScene ? ' (walked up & clicked)' : ''}`, on ? 'ok' : 'off');
+
+  // tell the real backend — this is what makes the toggle actually persist
+  // and show up identically on the plain dashboard / Discord bot
+  const backendId = twinIdToBackendId[id];
+  if(backendId && socket) socket.emit('toggle', backendId);
+}
+
+/* ---------- live feed ticker ---------- */
+function pushLog(text, tone){
+  const stamp = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  logMessages.unshift({ text, stamp, tone });
+  if(logMessages.length > 12) logMessages.pop();
+  renderTicker();
+}
+
+function renderTicker(){
+  const track = document.getElementById('ticker-track');
+  track.innerHTML = logMessages.map(m =>
+    `<span class="msg">[${m.stamp}] <b>${m.tone==='off' ? 'ALERT' : 'STATUS'}</b> — ${m.text}</span>`
+  ).join('');
+  // restart animation so new content is visible immediately
+  track.style.animation = 'none';
+  void track.offsetWidth;
+  track.style.animation = null;
+}
+
+// occasional idle-detection flavor events, purely cosmetic, sells the "game" feel
+const idleQuips = [
+  room => `${room} fan detected running with no occupancy signal`,
+  room => `Ambient sensor sweep complete in ${room}`,
+  room => `Power draw nominal across ${room}`,
+];
+setInterval(() => {
+  const onFans = Object.keys(deviceMeta).filter(id => deviceMeta[id].type==='fan' && state[id]);
+  if(onFans.length === 0) return;
+  const id = onFans[Math.floor(Math.random()*onFans.length)];
+  const quip = idleQuips[Math.floor(Math.random()*idleQuips.length)];
+  pushLog(quip(deviceMeta[id].roomName), 'info');
+}, 14000);
+
+/* =========================================================
+   REAL BACKEND CONNECTION
+   Maps this scene's local device ids (e.g. 'work1-fan-0') to the
+   real backend device ids (e.g. 'D6') by matching room name + label,
+   then keeps everything in sync with deviceStore.js on the server —
+   same source of truth as the plain dashboard and the Discord bot.
+   ========================================================= */
+const twinIdToBackendId = {};
+let backendReady = false;
+
+function buildBackendMap(devices){
+  devices.forEach(bd => {
+    const match = Object.keys(deviceMeta).find(twinId => {
+      const m = deviceMeta[twinId];
+      return m.roomName === bd.room && m.label === bd.name;
+    });
+    if(match) twinIdToBackendId[match] = bd.id;
+  });
+}
+
+function applyBackendSnapshot(snapshot){
+  if(!backendReady){
+    buildBackendMap(snapshot.devices);
+    backendReady = true;
+  }
+  snapshot.devices.forEach(bd => {
+    const twinId = Object.keys(twinIdToBackendId).find(k => twinIdToBackendId[k] === bd.id);
+    if(!twinId) return;
+    const on = bd.status === 'ON';
+    if(state[twinId] !== on){
+      state[twinId] = on;
+      const meta = deviceMeta[twinId];
+      if(meta.type === 'fan') applyFanVisual(twinId, on);
+      else applyLightVisual(twinId, on);
+      const chk = document.getElementById(`chk-${twinId}`);
+      if(chk) chk.checked = on;
+    }
+  });
+
+  // use REAL numbers from the backend instead of locally-estimated ones
+  ROOMS.forEach(room => {
+    const rd = snapshot.rooms.find(r => r.room === room.name);
+    if(!rd) return;
+    const pct = Math.min(100, (rd.power/ROOM_MAX_W)*100);
+    const wEl = document.getElementById(`rw-${room.id}`);
+    const bEl = document.getElementById(`rb-${room.id}`);
+    if(wEl) wEl.textContent = `${rd.power} W`;
+    if(bEl) bEl.style.width = `${pct}%`;
+  });
+  document.getElementById('total-power').innerHTML = `${snapshot.totalPower}<span>W</span>`;
+  const onIds = Object.keys(deviceMeta).filter(id => state[id]);
+  const fansOn = onIds.filter(id => deviceMeta[id].type==='fan').length;
+  const lightsOn = onIds.filter(id => deviceMeta[id].type==='light').length;
+  document.getElementById('devices-online').textContent = `${onIds.length} / 15`;
+  document.getElementById('fans-active').textContent = `${fansOn} / 6`;
+  document.getElementById('lights-active').textContent = `${lightsOn} / 9`;
+  document.getElementById('kwh-today').textContent = `${(snapshot.todayEnergyWh/1000).toFixed(2)} kWh`;
+  document.getElementById('unit-count-sub').textContent = `${onIds.length} UNITS ACTIVE / 15 TOTAL`;
+}
+
+let socket = null;
+if (window.io) {
+  socket = io();
+  socket.on('snapshot', applyBackendSnapshot);
+  socket.on('alert', (alert) => pushLog(alert.message, 'off'));
+  socket.on('connect', () => pushLog('Digital twin link established — live backend connected', 'ok'));
+  socket.on('connect_error', () => pushLog('Could not reach backend — showing local demo data only', 'off'));
+} else {
+  pushLog('Socket.io not found — running in local demo mode (start server.js for live data)', 'off');
+}
+
+/* ---------- init ---------- */
+buildTelemetry();
+buildUnitList();
+refreshDashboard();
+if(!socket) pushLog('Digital twin link established — all zones nominal', 'ok');
+</script>
+</body>
+</html>

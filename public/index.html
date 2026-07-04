@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Office Power Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1420;
+    --panel: #171d2b;
+    --border: #262f42;
+    --on: #ffd85e;
+    --on-glow: rgba(255, 216, 94, 0.55);
+    --off: #3a4257;
+    --text: #e8ecf5;
+    --muted: #8891a7;
+    --accent: #6ea8fe;
+    --alert: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 20px;
+  }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  .sub { color: var(--muted); margin-bottom: 20px; font-size: 13px; }
+  .grid {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 16px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .panel h2 { margin: 0 0 12px; font-size: 15px; color: var(--accent); }
+  .rooms { display: flex; flex-direction: column; gap: 12px; }
+  .room-box {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    background: #131928;
+  }
+  .room-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 8px;
+  }
+  .room-head b { font-size: 14px; }
+  .room-head span { color: var(--muted); font-size: 12px; }
+  .devices { display: flex; flex-wrap: wrap; gap: 8px; }
+  .device {
+    display: flex; align-items: center; gap: 6px;
+    background: #1d2437; border: 1px solid var(--border);
+    border-radius: 20px; padding: 5px 10px; font-size: 12px;
+    cursor: pointer; user-select: none;
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--off); }
+  .device.on .dot { background: var(--on); box-shadow: 0 0 8px var(--on-glow); }
+  .device.fan.on .dot { animation: spin 1s linear infinite; }
+  @keyframes spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }
+  .power-total { font-size: 40px; font-weight: 700; color: var(--on); }
+  .power-sub { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+  .room-power-row { display: flex; justify-content: space-between; font-size: 13px; padding: 6px 0; border-bottom: 1px dashed var(--border); }
+  .alerts { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
+  .alert-item { background: #2a1720; border: 1px solid var(--alert); color: #ffb3b3; padding: 8px 10px; border-radius: 8px; font-size: 12px; }
+  .alert-time { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .empty { color: var(--muted); font-size: 12px; }
+  .badge { font-size: 11px; background: #1d2437; padding: 2px 8px; border-radius: 10px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <h1>🏢 Office Power Dashboard</h1>
+  <div class="sub">Live device status &amp; energy monitoring — updates automatically, no refresh needed.</div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Live Device Status <span class="badge" id="deviceCount"></span></h2>
+      <div class="rooms" id="rooms"></div>
+    </div>
+
+    <div>
+      <div class="panel" style="margin-bottom:16px;">
+        <h2>Power Consumption</h2>
+        <div class="power-total" id="totalPower">0 W</div>
+        <div class="power-sub" id="todayUsage">Today: 0 kWh</div>
+        <div id="roomPowerBreakdown"></div>
+      </div>
+
+      <div class="panel">
+        <h2>⚠️ Active Alerts</h2>
+        <div class="alerts" id="alerts"><div class="empty">No alerts yet.</div></div>
+      </div>
+    </div>
+  </div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+
+function render(snapshot) {
+  document.getElementById('deviceCount').textContent = snapshot.devices.length + ' devices';
+  document.getElementById('totalPower').textContent = snapshot.totalPower + ' W';
+  document.getElementById('todayUsage').textContent =
+    'Today: ' + (snapshot.todayEnergyWh / 1000).toFixed(2) + ' kWh';
+
+  // Rooms + devices
+  const roomsEl = document.getElementById('rooms');
+  roomsEl.innerHTML = '';
+  snapshot.rooms.forEach(r => {
+    const box = document.createElement('div');
+    box.className = 'room-box';
+    box.innerHTML = `
+      <div class="room-head"><b>${r.room}</b><span>${r.power} W</span></div>
+      <div class="devices">
+        ${r.devices.map(d => `
+          <div class="device ${d.type} ${d.status === 'ON' ? 'on' : ''}" data-id="${d.id}" title="Last changed: ${new Date(d.lastChanged).toLocaleTimeString()}">
+            <span class="dot"></span>${d.name}
+          </div>
+        `).join('')}
+      </div>`;
+    roomsEl.appendChild(box);
+  });
+
+  // Click to toggle
+  document.querySelectorAll('.device').forEach(el => {
+    el.onclick = () => socket.emit('toggle', el.dataset.id);
+  });
+
+  // Room power breakdown
+  const bd = document.getElementById('roomPowerBreakdown');
+  bd.innerHTML = snapshot.rooms.map(r =>
+    `<div class="room-power-row"><span>${r.room}</span><span>${r.power} W</span></div>`
+  ).join('');
+
+  // Alerts
+  const alertsEl = document.getElementById('alerts');
+  if (!snapshot.alerts.length) {
+    alertsEl.innerHTML = '<div class="empty">No alerts yet.</div>';
+  } else {
+    alertsEl.innerHTML = snapshot.alerts.map(a => `
+      <div class="alert-item">
+        ${a.message}
+        <div class="alert-time">${new Date(a.timestamp).toLocaleString()}</div>
+      </div>
+    `).join('');
+  }
+}
+
+socket.on('snapshot', render);
+</script>
+</body>
+</html>
