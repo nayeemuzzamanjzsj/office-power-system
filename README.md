@@ -1,4 +1,4 @@
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/c7dc4138-1c7f-4bf6-b912-6020be62a69e" /># Office Power Monitoring System
+# Office Power Monitoring System
 
 Monitor 18 office devices (fans + lights across 3 rooms) via a live web dashboard
 and a Discord bot — both backed by one shared server, so they always agree.
