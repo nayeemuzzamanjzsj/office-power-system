@@ -1,4 +1,4 @@
-# Office Power Monitoring System
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/c7dc4138-1c7f-4bf6-b912-6020be62a69e" /># Office Power Monitoring System
 
 Monitor 18 office devices (fans + lights across 3 rooms) via a live web dashboard
 and a Discord bot — both backed by one shared server, so they always agree.
@@ -74,7 +74,7 @@ dashboard; if configured, the bot also posts them to Discord automatically.
 
 No physical hardware is required for this demo — device state is simulated in
 software. For the required hardware concept, build this in
-[Wokwi](https://wokwi.com/) (new project → ESP32) to represent **one room**:
+[Wokwi](https://wokwi.com/) (new project → https://wokwi.com/projects/468622681931995137) to represent **one room**:
 
 **Components:**
 - 1x ESP32 dev board
